@@ -52,17 +52,6 @@ PallyPower.options = {
 				[true] = L["ENABLED"]
 			},
 		},
-		smartpets = {
-			name = L["SPET"],
-			type = "toggle",
-			desc = L["SPET_DESC"],
-			get = "ToggleSmartPets",
-			set = "ToggleSmartPets",
-			map = {
-				[false]=L["DISABLED"], 
-				[true] = L["ENABLED"]
-			},
-		},
   		freeassign = {
 			name = L["FREEASSIGN"],
 			type = "toggle",
@@ -456,11 +445,6 @@ end
 function PallyPower:ToggleSmartBuffs(value)
 	if type(value) == "nil" then return self.opt.smartbuffs end
 	self.opt.smartbuffs = value;
-end
-
-function PallyPower:ToggleSmartPets(value)
-	if type(value) == "nil" then return self.opt.smartpets end
-	self.opt.smartpets = value;
 end
 
 function PallyPower:ToggleRFButton(value)

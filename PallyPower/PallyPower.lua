@@ -113,6 +113,16 @@ function PallyPowerConfigFrame_UpdateFlavor()
 		end
 		getglobal("PallyPowerConfigFrameClassGroup11"):Hide()
 		getglobal("PallyPowerConfigFrame"):SetWidth(1084)
+	else
+		-- column 11 is the pet column in Wrath. pets are grouped under their own class now,
+		-- so it holds nobody, and hiding it stops anything being assigned into a dead column
+		for pNum = 1, PALLYPOWER_MAXPERCLASS do
+			getglobal("PallyPowerConfigFramePlayer" .. pNum .. "Line1"):SetWidth(1064)
+			getglobal("PallyPowerConfigFramePlayer" .. pNum .. "Line13"):Hide()
+			getglobal("PallyPowerConfigFramePlayer" .. pNum .. "Class11"):Hide()
+		end
+		getglobal("PallyPowerConfigFrameClassGroup11"):Hide()
+		getglobal("PallyPowerConfigFrame"):SetWidth(1084)
 	end
 end
 
@@ -134,6 +144,7 @@ function PallyPower:OnEnable()
 	self:RegisterBucketEvent("SPELLS_CHANGED", 1, "SPELLS_CHANGED")
 	self:RegisterBucketEvent({"RAID_ROSTER_UPDATE", "PARTY_MEMBERS_CHANGED", "UNIT_PET"}, 1, "UpdateRoster")
 	self:ScheduleRepeatingEvent("PallyPowerInventoryScan", self.InventoryScan, 60, self)
+	self:ClearPetAssignment(self.player)
 	self:UpdateRoster()
 	self:BindKeys()
 end
@@ -665,6 +676,7 @@ function PallyPower:PerformCycle(name, class, skipzero)
 		PallyPower_Assignments[flavor][name][class] = cur
 		PallyPower:SendMessage("ASSIGN "..name.." "..class.." "..cur)
 	end
+	PallyPower:ClearPetAssignment(name)
 end
 
 function PallyPower:PerformCycleBackwards(name, class, skipzero)
@@ -698,6 +710,7 @@ function PallyPower:PerformCycleBackwards(name, class, skipzero)
 		PallyPower_Assignments[flavor][name][class] = cur
 		PallyPower:SendMessage("ASSIGN "..name.." "..class.." "..cur)
 	end
+	PallyPower:ClearPetAssignment(name)
 end
 
 function PallyPower:PerformPlayerCycle(arg1, pname, class)
@@ -1304,6 +1317,18 @@ function PallyPower:GetClassID(class)
 	return -1
 end
 
+-- pets are grouped under their own class now, so the pet column is never cast on and a value
+-- left in it only misleads clients that still put pets there. cleared alongside any assignment
+-- we push, and skipped when already zero so repeated cycling does not spam the channel
+function PallyPower:ClearPetAssignment(name)
+	local petClass = self:GetClassID("PET")
+	if petClass == -1 then return end
+	if not PallyPower_Assignments[flavor][name] then return end
+	if PallyPower_Assignments[flavor][name][petClass] == 0 then return end
+	PallyPower_Assignments[flavor][name][petClass] = 0
+	self:SendMessage("ASSIGN "..name.." "..petClass.." 0")
+end
+
 function PallyPower:ShouldIDisplay()
 	if GetNumRaidMembers() > 0 then
 		return true
@@ -1334,7 +1359,6 @@ function PallyPower:UpdateRoster()
 	local isInRaid
 
 	local skip = self.opt.extras
-	local smartpets = self.opt.smartpets
 
 	for i = 1, PALLYPOWER_MAXCLASSES do
 		classlist[i] = 0
@@ -1363,12 +1387,13 @@ function PallyPower:UpdateRoster()
 				tmp.name = UnitName(unitid)
 
 				local isPet = unitid:find("pet")
+				tmp.isPet = isPet and true or false
 
-				if isPet then
-					tmp.class = "PET"
-				else
-					tmp.class = select(2, UnitClass(unitid))
-				end
+				-- a greater blessing propagates to everyone sharing the target's class byte,
+				-- and a pet carries a real one (hunter pets and ghouls are warriors and rogues,
+				-- warlock pets are paladins, imps and water elementals are mages). grouping a pet
+				-- anywhere but its own class would aim that class's blessing at a different one
+				tmp.class = select(2, UnitClass(unitid))
 
 				if isInRaid then
 					local n = select(3, unitid:find("(%d+)"))
@@ -1384,39 +1409,6 @@ function PallyPower:UpdateRoster()
 				end
 
 				if tmp.subgroup < 6 or not skip then
-					if smartpets and isPet then
-						local pclass = select(2, UnitClass(unitid))
-						local family = UnitCreatureFamily(unitid)
-
-						if pclass == "WARRIOR" then -- hunter pets
-							tmp.class = pclass
-						elseif pclass == "ROGUE" then -- dk ghoul
-							tmp.class = pclass
-						elseif pclass == "MAGE" then -- water elemental, imp
-							if family == L["PET_IMP"] then
-								tmp.class = "WARLOCK"
-							else
-								tmp.class = pclass
-							end
-						elseif pclass == "PALADIN" then -- other warlock pets
-							if family == L["PET_FELHUNTER"] or family == L["PET_SUCCUBUS"] then
-								tmp.class = "WARLOCK"
-							else
-								tmp.class = "WARRIOR"
-							end
-						end
-
---						if family then
---							if family == L["PET_GHOUL"] then
---								tmp.class = "ROGUE"
---							elseif family == L["PET_IMP"] or family == L["PET_FELHUNTER"] or family == L["PET_SUCCUBUS"] then
---								tmp.class = "WARLOCK"
---							else
---								tmp.class = "WARRIOR"
---							end
---						end
-					end
-
 					--PallyPower:Print(tmp.name, tmp.class, tmp.rank, tmp.subgroup)
 
 					tinsert(roster, tmp)
@@ -2544,25 +2536,34 @@ function PallyPower:GetUnitAndSpellSmart(classID, mousebutton)
 
  	local spellID, gspellID = PallyPower:GetSpellID(classID)
 	local spell, gspell
+	-- a pet shares its class group, so it is a valid carrier for the greater blessing, but it
+	-- can be dismissed or wander out of range. take a player when one is available, pets second
 	if (mousebutton == "LeftButton") then
 		gspell = PallyPower.GSpells[gspellID]
-		for i, unit in pairs(class) do
-			if IsSpellInRange(gspell, unit.unitid) == 1 then
-				spellID, gspellID = PallyPower:GetSpellID(classID, unit.name)
-				spell = PallyPower.Spells[spellID]
-				gspell = PallyPower.GSpells[gspellID]
-				return unit.unitid, spell, gspell
+		for pass = 1, 2 do
+			for i, unit in pairs(class) do
+				if (pass == 2 or not unit.isPet) and IsSpellInRange(gspell, unit.unitid) == 1 then
+					spellID, gspellID = PallyPower:GetSpellID(classID, unit.name)
+					spell = PallyPower.Spells[spellID]
+					gspell = PallyPower.GSpells[gspellID]
+					return unit.unitid, spell, gspell
+				end
 			end
 		end
 	elseif (mousebutton == "RightButton") then
-		for i, unit in pairs(class) do
-			spellID, gspellID = PallyPower:GetSpellID(classID, unit.name)
-		 	spell = PallyPower.Spells[spellID]
-			spell2 = PallyPower.GSpells[spellID]
-			gspell = PallyPower.GSpells[gspellID]
-			local buffExpire, buffDuration = self:IsBuffActive(spell, spell2, unit.unitid)
-			if (not buffExpire or buffExpire/buffDuration < 0.5) and IsSpellInRange(spell, unit.unitid) == 1 then
-				return unit.unitid, spell, gspell
+		-- a normal blessing is single target, so one spent on a pet buffs only the pet
+		for pass = 1, 2 do
+			for i, unit in pairs(class) do
+				if (pass == 2 or not unit.isPet) then
+					spellID, gspellID = PallyPower:GetSpellID(classID, unit.name)
+					spell = PallyPower.Spells[spellID]
+					spell2 = PallyPower.GSpells[spellID]
+					gspell = PallyPower.GSpells[gspellID]
+					local buffExpire, buffDuration = self:IsBuffActive(spell, spell2, unit.unitid)
+					if (not buffExpire or buffExpire/buffDuration < 0.5) and IsSpellInRange(spell, unit.unitid) == 1 then
+						return unit.unitid, spell, gspell
+					end
+				end
 			end
 		end
 	end
@@ -2737,6 +2738,11 @@ function PallyPower:AutoBuff(mousebutton)
 				if (self.PreviousAutoBuffedUnit and unit.name == self.PreviousAutoBuffedUnit.name) then
 					penalty = penalty + PALLYPOWER_NORMALBLESSINGDURATION
 				end
+				-- an unbuffed pet otherwise reads as the most urgent target in the raid, and a
+				-- normal blessing on it buffs nothing else. players go first
+				if unit.isPet then
+					penalty = penalty + PALLYPOWER_NORMALBLESSINGDURATION * 2
+				end
 				--self:Print("penalty on " .. unit.name .. ": " .. penalty)
 				local buffExpire, _, buffName = self:IsBuffActive(spell, spell2, unit.unitid)
 				if ((not buffExpire or buffExpire + penalty < minExpire and buffExpire < PALLYPOWER_NORMALBLESSINGDURATION) and minExpire > 0 ) then
@@ -2792,10 +2798,15 @@ function PallyPower:LoadPreset(preset)
 			if not PallyPower_Assignments[flavor][name] then PallyPower_Assignments[flavor][name] = {} end
 			self:Print("       Paladin: " .. name)
 			local i
+			-- a preset saved before pets were grouped by class can still carry a pet column
+			-- value. skip it rather than broadcast it and correct it afterwards
+			local petClass = PallyPower:GetClassID("PET")
 			for i = 1, PALLYPOWER_MAXCLASSES do
-				PallyPower_Assignments[flavor][name][i] = PallyPower_SavedPresets[preset][name][i]
-				PallyPower:SendMessage("ASSIGN "..name.." "..i.." "..PallyPower_SavedPresets[preset][name][i]) 
-			end 
+				local skill = PallyPower_SavedPresets[preset][name][i]
+				if i == petClass then skill = 0 end
+				PallyPower_Assignments[flavor][name][i] = skill
+				PallyPower:SendMessage("ASSIGN "..name.." "..i.." "..skill)
+			end
 		end
 		self:Print("Done.")
 	else
@@ -2931,6 +2942,10 @@ function PallyPower:AutoAssign()
 	PallyPowerConfig_Clear()
 	WisdomPallys, MightPallys, KingsPallys, SalvPallys, LightPallys, SancPallys = {}, {}, {}, {}, {}, {}
 	PallyPower:AutoAssignBlessings()
+
+	for name in pairs(AllPallys) do
+		PallyPower:ClearPetAssignment(name)
+	end
 
 	local precedence = { 1, 3, 2, 4, 5, 6 }	 -- devotion, concentration, retribution, shadow, frost, fire
 	PallyPower:AutoAssignAuras(precedence)
