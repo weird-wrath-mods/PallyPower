@@ -1,5 +1,12 @@
 # PallyPower-Improved-3.3.5
 
+**Fork used on ChromieCraft, with these changes on top of [NoM0Re/PallyPower-Improved-3.3.5](https://github.com/NoM0Re/PallyPower-Improved-3.3.5):**
+
+- Pets are grouped under their real class rather than a separate pet column, so a greater blessing is never aimed at the wrong class. Replaces the Smart Pets option.
+- The buff button shows the icon of your assigned aura when you are not running that aura.
+
+------------------------------------------------
+
 ![PallyPower Example](https://github.com/NoM0Re/PallyPower-Improved-3.3.5/blob/main/PallyPower_Flash.gif)<br/><br/>
 
 [![HitCount](https://hits.dwyl.com/NoM0Re/PallyPower-Improved-3.3.5.svg?style=flat-square)](http://hits.dwyl.com/NoM0Re/PallyPower-Improved-3.3.5) ![GitHub contributors](https://img.shields.io/github/contributors/NoM0Re/PallyPower-Improved-3.3.5)
