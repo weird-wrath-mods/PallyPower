@@ -115,12 +115,24 @@ C:\Projects\WoW\Bin\Interface\FrameXML\UI.xsd">
 		  <Layer level="OVERLAY">
 			  <Texture name="$parentIcon" file="Interface\Icons\Spell_Holy_SummonChampion">
 				  <Size>
-					  <AbsDimension x="26" y="26" /> 
+					  <AbsDimension x="26" y="26" />
 				  </Size>
 				  <Anchors>
 					  <Anchor point="TOPLEFT">
 						  <Offset>
-							  <AbsDimension x="4" y="-4" /> 
+							  <AbsDimension x="4" y="-4" />
+						  </Offset>
+					  </Anchor>
+				  </Anchors>
+			  </Texture>
+			  <Texture name="$parentAuraWarn" file="Interface\AddOns\PallyPower\Icons\AuraMastery" hidden="true">
+				  <Size>
+					  <AbsDimension x="26" y="26" />
+				  </Size>
+				  <Anchors>
+					  <Anchor point="TOPLEFT" relativeTo="$parentIcon" relativePoint="TOPRIGHT">
+						  <Offset>
+							  <AbsDimension x="4" y="0" />
 						  </Offset>
 					  </Anchor>
 				  </Anchors>

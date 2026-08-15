@@ -2447,6 +2447,21 @@ function PallyPower:ButtonsUpdate()
 		text:SetText("")
 	end
 
+	-- flag a wrong or missing aura on the buff button itself, whether or not the
+	-- aura module is switched on. the icon is the aura you were assigned, matching
+	-- how the aura button shows its own assignment
+	local auraWarn = _G["PallyPowerAutoAuraWarn"]
+	local auraWrong, wantedAura = self:AuraMismatched()
+	if auraWrong then
+		local _, _, icon = GetSpellInfo(PallyPower.Auras[wantedAura])
+		if icon then
+			auraWarn:SetTexture(icon)
+		end
+		auraWarn:Show()
+	else
+		auraWarn:Hide()
+	end
+
 	local rfbutton = _G["PallyPowerRF"]
 	local time1 = _G["PallyPowerRFTime1"] -- rf timer
 	local time2 = _G["PallyPowerRFTime2"] -- seal timer
@@ -3176,6 +3191,18 @@ function PallyPower:HasAura(name, test)
 		return false
 	end
 	return true
+end
+
+-- true when you hold an aura assignment you can act on but are not the one running it,
+-- along with the assignment itself so callers can show which aura is wanted
+function PallyPower:AuraMismatched()
+	if not PP_IsPally then return false end
+	local aura = PallyPower_AuraAssignments[flavor][self.player]
+	if not aura or aura == 0 then return false end
+	if not (AllPallys[self.player] and AllPallys[self.player].AuraInfo) then return false end
+	if not self:HasAura(self.player, aura) then return false end
+	local active, selfCast = self:IsAuraActive(aura)
+	return not (active and selfCast), aura
 end
 
 function PallyPower:PerformAuraCycle(name, skipzero)
